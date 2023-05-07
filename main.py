@@ -38,6 +38,7 @@ MINES = m
 BLACK = (0, 0, 0)
 GRAY = (180, 180, 180)
 WHITE = (255, 255, 255)
+YELLOW = (240, 230, 140)
 
 NUM_COLOR = [(0, 0, 255), (0, 128, 0), (255, 0, 0), (0, 0, 128),
              (128, 0, 0), (0, 128, 128), (0, 0, 0), (128, 128, 128)]
@@ -68,24 +69,21 @@ mine = pygame.transform.scale(mine, (cell_size, cell_size))
 
 # Create game and AI agent
 game = Minesweeper(height=HEIGHT, width=WIDTH, mines=MINES)
-ai = MinesweeperAI(height=HEIGHT, width=WIDTH)
+ai = MinesweeperAI(height=HEIGHT, width=WIDTH, game=game)
 
-ans_board = [[0 for _ in range(game.height)] for _ in range(game.width)]
-for i in range(game.height):
-    for j in range(game.width):
-        if not game.board[i][j]:
-            ans_board[i][j] = game.nearby_mines((i, j))
-        else:
-            ans_board[i][j] = -1
-print("initiate board:")
-for b in ans_board:
-    print(b)
 
 # Keep track of revealed cells, flagged cells, and if a mine was hit
 revealed = set()
 flags = set()
+safes = set()
 lost = False
 stuck = False
+win = False
+revealed_count = 0
+ans_board = game.ans_board
+print("initiate board:")
+for b in game.ans_board:
+    print(b)
 
 # Show instructions initially
 instructions = True
@@ -141,7 +139,6 @@ while True:
 
     # Draw board
     cells = []
-    revealed_count = 0
     for i in range(HEIGHT):
         row = []
         for j in range(WIDTH):
@@ -153,7 +150,6 @@ while True:
                 cell_size, cell_size
             )
             if (i, j) in revealed:
-                revealed_count += 1
                 pygame.draw.rect(screen, WHITE, rect)
             else:
                 pygame.draw.rect(screen, GRAY, rect)
@@ -176,6 +172,20 @@ while True:
                     neighborsTextRect = neighbors.get_rect()
                     neighborsTextRect.center = rect.center
                     screen.blit(neighbors, neighborsTextRect)
+            elif (i, j) in safes:
+                nearby = game.nearby_mines((i, j))
+                if nearby:
+                    neighbors = smallFont.render(
+                        str(nearby),
+                        True, GRAY
+                    )
+                    pygame.draw.rect(screen, YELLOW, rect)
+                    neighborsTextRect = neighbors.get_rect()
+                    neighborsTextRect.center = rect.center
+                    screen.blit(neighbors, neighborsTextRect)
+                else:
+                    pygame.draw.rect(screen, YELLOW, rect)
+
             row.append(rect)
         cells.append(row)
         if revealed_count > round(math.sqrt(h*w)) and init_flag:
@@ -212,8 +222,14 @@ while True:
     screen.blit(buttonText, buttonRect)
 
     # Display text
-    text = "Lost" if lost else "Won" if game.mines == flags else ""
-    text = "Stuck" if stuck else text
+    if lost:
+        text = "Lost"
+    elif stuck:
+        text = "Stuck"
+    elif win:
+        text = "Win"
+    else:
+        text = ""
     text = mediumFont.render(text, True, WHITE)
     textRect = text.get_rect()
     textRect.center = ((5 / 6) * width, (2 / 3) * height)
@@ -225,8 +241,8 @@ while True:
 
     
     if init_flag:
-        move = make_random_move(ai, game)
-        
+        move = ai.init_knowledge()
+        revealed_count += 1
     # Check for a right-click to toggle flagging    
     elif right == 1 and not lost:
         mouse = pygame.mouse.get_pos()
@@ -245,52 +261,55 @@ while True:
         if aiButton.collidepoint(mouse) and not lost:
             time.sleep(0.2)
 
-            ai.add_knowledge(game)
-            move = ai.make_safe_move()
-            print("len:", len(ai.knowledge), len(ai.knowledge0))
+            ai.add_knowledge()
+            print("KB len:", len(ai.knowledge))
+            print("KB0 len:", len(ai.knowledge0))
             print("Known mines:", len(ai.mines))
             print("Unknown mines:", len(game.mines) - len(ai.mines))
-            print("Safe", len(ai.safes), len(ai.pos_set))
-            for m in ai.mines:
-                print(m)
-            ai.mark_board(game.board, "Total check")
-            if move is None:
-                if len(ai.mines) == len(game.mines):
-                    find_mine = ai.mines.copy()
-                    mine_list = []
-                    print("ensure mines:")
-                    for m in find_mine:
-                        mine_list.append(m[:2])
-                        print(m[:2])
-                    flags = mine_list
-                    
-                    if ai.mark_board(game.board, "Win check"):
-                        print("WIN!!")
-                    else:
-                        print("ERROR BOARD")
-                else:
-                    print("[X] No known safe moves, AI can not make safe move")
-                    print("Stop the game")
-                    
-                    find_mine = ai.mines.copy()
-                    mine_list = []
-                    print("ensure mines:")
-                    for m in find_mine:
-                        mine_list.append(m[:2])
-                        print(m[:2])
-                    flags = mine_list
-                    stuck = True
+            print("Safe", len(ai.safes))
+            
+            # check the board
+            if not ai.mark_board(game.board, "Total check"):
+                print("ERROR!")
+                time.sleep(1)
+            safe_list = []
+            for s in ai.safes:
+                safe_list.append(s[:2])
+            safes = set(safe_list)
+
+            if len(ai.mines) == len(game.mines):
+                find_mine = ai.mines.copy()
+                mine_list = []
+                for m in find_mine:
+                    mine_list.append(m[:2])
+                flags = set(mine_list)
+                win = True
+                print("WIN!!")
+
             else:
-                print("[O] AI can make safe move")
+                find_mine = ai.mines.copy()
+                mine_list = []
+                for m in find_mine:
+                    mine_list.append(m[:2])
+                flags = set(mine_list)
+                stuck = True
+                print("Stuck")
 
         elif resetButton.collidepoint(mouse):
             game = Minesweeper(height=HEIGHT, width=WIDTH, mines=MINES)
-            ai = MinesweeperAI(height=HEIGHT, width=WIDTH)
+            ai = MinesweeperAI(height=HEIGHT, width=WIDTH, game=game)
             revealed = set()
             flags = set()
+            safes = set()
             lost = False
             stuck = False
+            win = False
             init_flag = True
+            revealed_count = 0
+            ans_board = game.ans_board
+            print("initiate board:")
+            for b in game.ans_board:
+                print(b)
             continue
 
         # User-made move
@@ -311,15 +330,6 @@ while True:
             # get the number of nearby mines
             nearby = game.nearby_mines(move)
             revealed.add(move)
-            ai.init_knowledge(move)
-            # ai.add_knowledge(game, init_flag, move)
-            # for b in ai.board:
-            #     print(b)
-            
-            # if init_flag:
-            #     ai.init_knowledge(move)
-            # else:
-            #     ai.add_knowledge(move, game)
             if not nearby:
                 # Loop over all cells within one row and column
                 for i in range(move[0] - 1, move[0] + 2):
@@ -331,8 +341,9 @@ while True:
 
                         # Add to the cell collection if the cell is not yet explored
                         # and is not the mine already none
-                        if 0 <= i < HEIGHT and 0 <= j < WIDTH and (i, j) not in revealed:
-                            make_move((i, j))
+                        
+                        # if 0 <= i < HEIGHT and 0 <= j < WIDTH and (i, j) not in revealed:
+                        #     make_move((i, j))
     if move:
         if make_move(move):
             lost = True

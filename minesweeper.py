@@ -1,7 +1,7 @@
 import itertools
 import random
 import copy
-random.seed (5)
+random.seed(10)
 
 class Minesweeper():
     """Minesweeper game representation"""
@@ -31,7 +31,19 @@ class Minesweeper():
 
         # At first, player has found no mines
         self.mines_found = set()
-
+        self.ans_board = None
+        self.init_board()
+        
+    def init_board(self):
+        ans_board = [[0 for _ in range(self.height)] for _ in range(self.width)]
+        for i in range(self.height):
+            for j in range(self.width):
+                if not self.board[i][j]:
+                    ans_board[i][j] = self.nearby_mines((i, j))
+                else:
+                    ans_board[i][j] = -1
+        self.ans_board = ans_board
+        
     def print(self):
         """Prints a text-based representation of where mines are located."""
 
@@ -58,7 +70,6 @@ class Minesweeper():
 
         # Keep count of nearby mines
         count = 0
-
         # Loop over all cells within one row and column
         for i in range(cell[0] - 1, cell[0] + 2):
             for j in range(cell[1] - 1, cell[1] + 2):
@@ -106,21 +117,21 @@ class Sentence():
 
     def be_not(self):
         new_cells = set()
-        for c in self.cells:
+        target_cells = self.cells.copy()
+        for c in target_cells:
             new_c = (c[0], c[1], -c[2])
             new_cells.add(new_c)
         return new_cells
     
     def matching_sentence(self, other, target):
         # target in other, -target in self
-        self_cells = self.cells
-        other_cells = other.cells
+        self_cells = self.cells.copy()
+        other_cells = other.cells.copy()
 
         other_cells.remove(target)
         n_target = (target[0], target[1], -target[2])
         self_cells.remove(n_target)
         new_cells = (other_cells | self_cells)
-
         s = Sentence(new_cells)
         return s
     # def known_mines(self):
@@ -148,10 +159,11 @@ class Sentence():
 
 
 class MinesweeperAI():
-    def __init__(self, height, width):
+    def __init__(self, height, width, game):
         # Set initial height and width
         self.height = height
         self.width = width
+        self.game = game
         # Using set() to save (not repeating)
         # Keep track of which cells have been chosen
         self.moves_made = set()
@@ -168,7 +180,6 @@ class MinesweeperAI():
         self.knowledge = []
         self.knowledge0 = []
 
-        self.game = None
         
         self.board = []
         for i in range(self.height):
@@ -188,10 +199,17 @@ class MinesweeperAI():
     #     self.safes.add(cell)
     #     for sentence in self.knowledge:
     #         sentence.mark_safe(cell)
+    
+    # def clean_kb(self):
+    #     for s1 in self.knowledge:
+    #         for s2 in self.knowledge:
+    #             if s1 is s2:
+    #                 continue
+    #             elif s1 == s2:
+    #                 self.knowledge.remove(s2)
 
     def mark_board(self, board, say=""):
         mark_board = []
-        print("in the check:", say)
         for i in range(self.height):
             row = []
             for j in range(self.width):
@@ -206,21 +224,12 @@ class MinesweeperAI():
                     mark_board[i][j] = -1
                 # check the mark 
                 else:
+                    print("in the check:", say)
                     print("Error board")
                     print((i, j), mark_board[i][j], v)
                     for s in self.mines:
                         print(s)
                     return False
-        #             # exit(1)
-        # print("-------mark -----------")
-        # for i in range(self.height):
-        #     print(mark_board[i])
-        # print("-------mark -----------")
-        
-        # print("-------origin -----------")
-        # for i in range(self.height):
-        #     print(board[i])
-        # print("-------origin -----------")
         return True
 
                 
@@ -228,14 +237,14 @@ class MinesweeperAI():
         if len(sentence) != 1:
             return 0
         for cell in sentence.cells:
+            if sentence not in self.knowledge0:
+                self.knowledge0.append(sentence)
+                
             if cell[2] == 1:
                 self.mines.add(cell)
             else:
                 self.safes.add(cell)
-            # self.get_kb0()
-            # for kk in self.knowledge0:
-            #     print(kk.cells)       
-            self.knowledge0.append(sentence)
+
             if sentence in self.knowledge:
                 self.knowledge.remove(sentence)
     
@@ -255,15 +264,22 @@ class MinesweeperAI():
         #             if len(new_s2) > 0:
         #                 self.knowledge.append(new_s2)
         if len(s1) == 1:
-            self.mark_single_literal(s1)
             self.unit_propagation(s1)
+            self.knowledge.append(s1)
+            return 0
+        
+        if len(s1) < 1:
+            return 0
         elif len(s1) > 1:
+            not_append = False
             for s2 in self.knowledge:
                 if s1 is s2:
+                    not_append = True
+                    continue
+                elif s1 == s2:
+                    not_append = True
                     continue
                 # # s1 and s2 have same cells and count -> Duplicates
-                # elif s1 == s2: -> subset
-                #     continue
                 # s1 cells is s2 cells' subset -> Subsumption
                 elif s1.cells.issubset(s2.cells):
                     if s1 not in self.knowledge:
@@ -272,14 +288,10 @@ class MinesweeperAI():
                         self.knowledge.remove(s2)
                         # return 0
                 elif s2.cells.issubset(s1.cells):
-                    if s1 not in self.knowledge:
-                        # not insert the s1
-                        
-                        # self.knowledge.append(s1)
-                        # self.knowledge.remove(s1)
-                        # self.knowledge.remove(s2)
-                        return 0
-            self.knowledge.append(s1)
+                    not_append = True
+                    # return 0
+            if not not_append:
+                self.knowledge.append(s1)
         
     def matching(self, s1):
         # for s1 in self.knowledge:
@@ -290,14 +302,10 @@ class MinesweeperAI():
                 continue
             n_cells = s1.be_not()
             target = n_cells & s2.cells
-            if len(target) == 1:
+            if len(target) == 1 and len(n_cells) == 2 and len(s2.cells) == 2:
                 for t in target:
-                    # print(n_cells, "\n=====\n",s2.cells)
-                    # print(target)
                     new_sentence = s1.matching_sentence(s2, t)
-                    if len(new_sentence) > 0:
-                        self.inserting(new_sentence)
-                    # self.knowledge.append(new_sentence)
+                    self.inserting(new_sentence)
                     
     def unit_propagation(self, sentence):
         # 4. Unit-propagation heuristic:
@@ -324,8 +332,10 @@ class MinesweeperAI():
                     #     print("check error", multi_literal.cells)
                     #     print(new_multi_literal)
         
-    def init_knowledge(self, pos):
+    def init_knowledge(self):
+        pos = self.make_random_move()
         if pos in self.pos_set:
+            print("init error!")
             return 0
         self.pos_set.add(pos)
         cell_set = set()
@@ -333,7 +343,8 @@ class MinesweeperAI():
         self.knowledge.append(Sentence(cell_set))
         self.moves_made.add((pos[0], pos[1], -1))
         self.board[pos[0]][pos[1]] = -1
-        
+        return pos
+    
     def get_nearby_mines(self, pos):
         nearby = self.game.nearby_mines(pos)
         return nearby
@@ -341,6 +352,7 @@ class MinesweeperAI():
     def init_neighbors(self, pos):
         cells = set()
         n = self.get_nearby_mines(pos)
+        # n = self.game.ans_board[pos[0]][pos[1]]
         # Loop over all cells within one row and column
         for i in range(pos[0] - 1, pos[0] + 2):
             for j in range(pos[1] - 1, pos[1] + 2):
@@ -358,7 +370,6 @@ class MinesweeperAI():
         # Initiation
         m = len(cells)
         cells_list = list(cells)
-        print("m, n", m, n, ", pos:", pos)
         
         # all mines
         if m == 0:
@@ -367,17 +378,14 @@ class MinesweeperAI():
             for c in cells:
                 cell_set = set()
                 cell_set.add((c[0], c[1], 1))
-                # self.knowledge.append(Sentence(cell_set))
                 self.inserting(Sentence(cell_set))
             if not self.mark_board(self.game.board, "in m==n"):
-                print("KB", len(self.knowledge), len(self.knowledge0))
                 return 0
         # all safe
         elif n == 0:
             for c in cells:
                 cell_set = set()
                 cell_set.add(c)
-                # self.knowledge.append(Sentence(cell_set))
                 self.inserting(Sentence(cell_set))
                 
             if not self.mark_board(self.game.board, say="in n==0"):
@@ -412,131 +420,70 @@ class MinesweeperAI():
             if not self.mark_board(self.game.board, say="C(m, n+1)"):
                 print("KB", len(self.knowledge), len(self.knowledge0))
                 return 0
+    
+    def check_state(self, old_kb):
+        if len(self.knowledge) == 0 and len(self.mines) == len(self.game.mines):
+            return False
+        elif len(self.knowledge) == 0:
+            return False
+        elif old_kb == self.knowledge:
+            return False
+        return True
             
-    def add_knowledge(self, game, move=None):
-        # if move is not None:
-        #     self.init_knowledge(move)
-        
-        # cell: chosen cell
-        # count: the number of mines nearby chosen cell
-        # when AI move -> update knowledge base
-        self.game = game
-
+    def add_knowledge(self):
         copy_knowledge = []
-        copy_knowledge = copy.deepcopy(self.knowledge)
-        # for k in copy_knowledge:
-        #     rr += 1
-        #     print(k.cells)
-        #     if rr == 4:
-        #         print(" ========= ")
-        #         break
-        # count = 0
-        # rr = 0
-        for k in copy_knowledge:
-            # If there is a single-lateral clause in the KB:
-            if len(k) == 1:
-                
-                # Mark that cell as safe or mined.
-                # Move that clause to KB0.
-                self.mark_single_literal(k)
+        loop = True
+        while(loop):
+            copy_knowledge = copy.deepcopy(self.knowledge)
+            # for k in copy_knowledge:
+            #     print(k.cells)
+            for k in copy_knowledge:
+                # If there is a single-lateral clause in the KB:
+                if len(k) < 1:
+                    continue
+                elif len(k) == 1:
+                    # Mark that cell as safe or mined.
+                    # Move that clause to KB0.
+                    self.mark_single_literal(k)
+                    # self.matching(k)
+                    self.unit_propagation(k)
+                    if not self.mark_board(self.game.board, "after unit_pro"):
+                        print("STEP2 ERROR", k.cells)
+                        return 0
 
-                # count += 1
-                # self.matching(k)
-                self.unit_propagation(k)
-                if not self.mark_board(game.board, "after unit_pro"):
-                    print("STEP2 ERROR", k.cells)
-                    return 0
-                          
-                # print("update k")
-                # for k in self.knowledge:
-                #     print(k.cells)
-                print("KB", len(self.knowledge), len(self.knowledge0))
-                for c in k.cells:
-                    if c[2] == -1:
-                        self.init_neighbors(c[:2])
-                if not self.mark_board(game.board, "after neighbor"):
-                    print("STEP3 ERROR", k.cells)
-                    print("KB", len(self.knowledge), len(self.knowledge0))
-                    return 0
-            else:
-                self.matching(k)
-                if not self.mark_board(game.board, "after matching"):
-                    print("matching ERROR", k.cells)
-                    print("KB", len(self.knowledge), len(self.knowledge0))
-                    return 0
-                        
-        # copy_knowledge = []
-        # copy_knowledge = copy.deepcopy(self.knowledge)
-        # for k in copy_knowledge:
-        #     if len(k) == 1:
-        #         print("not clear!!!")
-        #     self.matching(k)
-        #         # print("matching22")
-        #         # self.clear_kb()
-        print(len(self.knowledge), len(self.knowledge0))
-        # exit(1)      
-
-        print("======================")   
-        for sentence in self.knowledge:
-            print(sentence.cells)
-        print("======================")
-        
-        # count = 0
-        # self.get_kb0()
-        # for s in self.knowledge0:
-        #     print(s.cells)
-        #     for k in self.knowledge:
-        #         if s.cells.issubset(k.cells):
-        #             # print(s.cells)
-        #             count += 1
-        print("count:")
-        print(len(self.knowledge), len(self.knowledge0))
-        print(len(self.moves_made), len(self.safes), len(self.mines))
-        # print(self.mines)
-        # print("======================")   
-        
+                    for c in k.cells:
+                        if c[2] == -1:
+                            self.init_neighbors(c[:2])
+                            
+                    if not self.mark_board(self.game.board, "after neighbor"):
+                        return 0
+                else:
+                    self.matching(k)
+                    # return 0
+                    if not self.mark_board(self.game.board, "after matching"):
+                        print("matching ERROR", k.cells)
+                        print("KB", len(self.knowledge), len(self.knowledge0))
+                        return 0
+            loop = self.check_state(copy_knowledge)
         return 0
     
-    def make_safe_move(self):
+            
+            
+    def make_random_move(self):
+        # safe set is NULL -> random choose (avoid the ensure mine cells)
         """
-        Returns a safe cell to choose on the Minesweeper board.
-        The move must be known to be safe, and not already a move
-        that has been made.
-
-        This function may use the knowledge in self.mines, self.safes
-        and self.moves_made, but should not modify any of those values.
+        Returns a move to make on the Minesweeper board.
+        Should choose randomly among cells that:
+            1) have not already been chosen, and
+            2) are not known to be mines
         """
-        safe_move = self.safes - self.moves_made
-        safe_move = []
-        for safe in self.safes:
-            if safe[:2] not in self.pos_set:
-                safe_move.append(safe[:2])
-        if len(safe_move) > 0:
-            print("safe choice:", len(safe_move))
-            action = random.choice(tuple(safe_move))
-            print("move to:", action)
-            
-            return action
-        # no confident safe move
-        print("pos", len(self.safes), len(self.pos_set))
-        return None
-            
-            
-def make_random_move(ai, game):
-    # safe set is NULL -> random choose (avoid the ensure mine cells)
-    """
-    Returns a move to make on the Minesweeper board.
-    Should choose randomly among cells that:
-        1) have not already been chosen, and
-        2) are not known to be mines
-    """
-    # # if no move can be made
-    # if len(self.mines) + len(self.moves_made) == self.height * self.width:
-    #     return None
+        # # if no move can be made
+        # if len(self.mines) + len(self.moves_made) == self.height * self.width:
+        #     return None
 
-    # loop until an appropriate move is found
-    while True:
-        i = random.randrange(game.height)
-        j = random.randrange(game.width)
-        if (i, j) not in ai.moves_made and (i, j) not in game.mines:
-            return (i, j)
+        # loop until an appropriate move is found
+        while True:
+            i = random.randrange(self.game.height)
+            j = random.randrange(self.game.width)
+            if (i, j) not in self.pos_set and (i, j) not in self.game.mines:
+                return (i, j)
