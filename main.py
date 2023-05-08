@@ -33,6 +33,9 @@ else:
 HEIGHT = h
 WIDTH = w
 MINES = m
+print("HEIGHT =", h)
+print("WIDTH =", w)
+print("MINES =", m)
 
 # Colors
 BLACK = (0, 0, 0)
@@ -45,7 +48,7 @@ NUM_COLOR = [(0, 0, 255), (0, 128, 0), (255, 0, 0), (0, 0, 128),
 
 # Create game
 pygame.init()
-size = width, height = 600, 400
+size = width, height = 900, 500
 screen = pygame.display.set_mode(size)
 
 # Fonts
@@ -185,19 +188,24 @@ while True:
                     screen.blit(neighbors, neighborsTextRect)
                 else:
                     pygame.draw.rect(screen, YELLOW, rect)
+            elif (lost or stuck) and (i, j) not in safes:
+                nearby = game.nearby_mines((i, j))
+                if nearby:
+                    neighbors = smallFont.render(
+                        str(nearby),
+                        True, BLACK
+                    )
+                    pygame.draw.rect(screen, GRAY, rect)
+                    neighborsTextRect = neighbors.get_rect()
+                    neighborsTextRect.center = rect.center
+                    screen.blit(neighbors, neighborsTextRect)
+                else:
+                    pygame.draw.rect(screen, GRAY, rect)
 
             row.append(rect)
         cells.append(row)
-        if revealed_count > round(math.sqrt(h*w)) and init_flag:
-            # print("revealed_count", revealed_count, round(math.sqrt(h*w)))
+        if revealed_count >= round(math.sqrt(h*w)) and init_flag:
             init_flag = False
-            # print("Before change flag:", len(ai.knowledge), len(ai.knowledge0))
-            # # ai.add_knowledge(game, init_flag, None)
-            # print("change flag:", len(ai.knowledge), len(ai.knowledge0))
-            # print("find mine/safe/pos_set:", len(ai.mines), len(ai.safes), len(ai.pos_set))
-
-            # if not ai.mark_board(game.board):
-            #     print("ERRRRRR")
 
     # AI Move button
     aiButton = pygame.Rect(
@@ -294,7 +302,8 @@ while True:
                 flags = set(mine_list)
                 stuck = True
                 print("Stuck")
-
+                
+        # Reset
         elif resetButton.collidepoint(mouse):
             game = Minesweeper(height=HEIGHT, width=WIDTH, mines=MINES)
             ai = MinesweeperAI(height=HEIGHT, width=WIDTH, game=game)
@@ -320,8 +329,8 @@ while True:
                             and (i, j) not in flags
                             and (i, j) not in revealed):
                         move = (i, j)
+                        ai.init_knowledge(move)
 
-    # Make move and update AI knowledge
     def make_move(move):
         
         if game.is_mine(move):
@@ -341,9 +350,8 @@ while True:
 
                         # Add to the cell collection if the cell is not yet explored
                         # and is not the mine already none
-                        
-                        # if 0 <= i < HEIGHT and 0 <= j < WIDTH and (i, j) not in revealed:
-                        #     make_move((i, j))
+                        if 0 <= i < HEIGHT and 0 <= j < WIDTH and (i, j) not in revealed:
+                            make_move((i, j))
     if move:
         if make_move(move):
             lost = True

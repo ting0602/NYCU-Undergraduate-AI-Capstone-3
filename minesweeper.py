@@ -1,12 +1,9 @@
-import itertools
 import random
 import copy
-random.seed(10)
 
 class Minesweeper():
     """Minesweeper game representation"""
-
-    def __init__(self, height=8, width=8, mines=8):
+    def __init__(self, height, width, mines):
 
         # Set initial width, height, and number of mines
         self.height = height
@@ -35,7 +32,13 @@ class Minesweeper():
         self.init_board()
         
     def init_board(self):
-        ans_board = [[0 for _ in range(self.height)] for _ in range(self.width)]
+        ans_board = []
+        for i in range(self.height):
+            row = []
+            for j in range(self.width):
+                row.append(0)
+            ans_board.append(row)
+            
         for i in range(self.height):
             for j in range(self.width):
                 if not self.board[i][j]:
@@ -43,19 +46,6 @@ class Minesweeper():
                 else:
                     ans_board[i][j] = -1
         self.ans_board = ans_board
-        
-    def print(self):
-        """Prints a text-based representation of where mines are located."""
-
-        for i in range(self.height):
-            print("--" * self.width + "-")
-            for j in range(self.width):
-                if self.board[i][j]:
-                    print("|X", end="")
-                else:
-                    print("| ", end="")
-            print("|")
-        print("--" * self.width + "-")
 
     def is_mine(self, cell):
         i, j = cell
@@ -84,33 +74,16 @@ class Minesweeper():
                         count += 1
 
         return count
-
-    def won(self):
-        """Checks if all mines have been flagged."""
-
-        return self.mines_found == self.mines
-
-class literal():
-    def __init__(self, pos, value=1):
-        self.pos = pos
-        self.value = value
-        
-    def __eq__(self, other):
-        # when cells and count are equal
-        return self.cells == other.cells and self.value == other.value
-
 class Sentence():
     def __init__(self, cells):
         # cells are the mine candidate
         # count is the number of mine
         self.cells = set(cells) # m unmarked cells
+        # cell = (y, x, 1 or -1)
 
     def __eq__(self, other):
         # when cells and count are equal
         return self.cells == other.cells
-
-    # def __str__(self):
-    #     return f"{self.cells} contain {self.count} mine" 
     
     def __len__(self):
         return len(self.cells)
@@ -134,29 +107,6 @@ class Sentence():
         new_cells = (other_cells | self_cells)
         s = Sentence(new_cells)
         return s
-    # def known_mines(self):
-    #     # when count == cells -> all cells are mines!
-    #     if self.count == len(self.cells):
-    #         return self.cells
-    #     return None
-
-    # def known_safes(self):
-    #     # when count = 0 -> all cells are safe!
-    #     if self.count == 0:
-    #         return self.cells
-    #     return None
-
-    # def mark_mine(self, cell):
-    #     # Update when know that the cell is mine
-    #     if cell in self.cells:
-    #         self.cells.remove(cell)
-    #         self.count -= 1
-
-    # def mark_safe(self, cell):
-    #     # Update when know that the cell is safe
-    #     if cell in self.cells:
-    #         self.cells.remove(cell)
-
 
 class MinesweeperAI():
     def __init__(self, height, width, game):
@@ -165,9 +115,7 @@ class MinesweeperAI():
         self.width = width
         self.game = game
         # Using set() to save (not repeating)
-        # Keep track of which cells have been chosen
-        self.moves_made = set()
-        
+
         self.pos_set = set()
 
         # Keep track of cells known to be safe or mines
@@ -180,33 +128,12 @@ class MinesweeperAI():
         self.knowledge = []
         self.knowledge0 = []
 
-        
         self.board = []
         for i in range(self.height):
             row = []
             for j in range(self.width):
                 row.append(0)
             self.board.append(row)
-    # def mark_mine(self, cell):
-    #     # marks a cell as a mine
-    #     # update all knowledge to mark all this cell as a mine
-    #     self.mines.add(cell)
-    #     for sentence in self.knowledge:
-    #         sentence.mark_mine(cell)
-
-    # def mark_safe(self, cell):
-    #     # Know the cell is safe -> mark and update safes set and knowledge
-    #     self.safes.add(cell)
-    #     for sentence in self.knowledge:
-    #         sentence.mark_safe(cell)
-    
-    # def clean_kb(self):
-    #     for s1 in self.knowledge:
-    #         for s2 in self.knowledge:
-    #             if s1 is s2:
-    #                 continue
-    #             elif s1 == s2:
-    #                 self.knowledge.remove(s2)
 
     def mark_board(self, board, say=""):
         mark_board = []
@@ -250,19 +177,9 @@ class MinesweeperAI():
     
     def inserting(self, s1):
         # About inserting a new clause to the KB:
-        # for s1 in self.knowledge:
-        # self.get_kb0()
-        
         for s in self.knowledge0:
             self.unit_propagation(s)
-                
-        #     for s2 in self.knowledge:
-        #         if s.cells.issubset(s2.cells) and len(s2) > 1:
-        #             self.knowledge.remove(s2)
-        #             s2.cells = s2.cells - s.cells
-        #             new_s2 = Sentence(s2.cells)
-        #             if len(new_s2) > 0:
-        #                 self.knowledge.append(new_s2)
+
         if len(s1) == 1:
             self.unit_propagation(s1)
             self.knowledge.append(s1)
@@ -279,17 +196,14 @@ class MinesweeperAI():
                 elif s1 == s2:
                     not_append = True
                     continue
-                # # s1 and s2 have same cells and count -> Duplicates
+                # s1 and s2 have same cells and count -> Duplicates
                 # s1 cells is s2 cells' subset -> Subsumption
                 elif s1.cells.issubset(s2.cells):
                     if s1 not in self.knowledge:
-                        # self.knowledge.append(s1)
-                        # self.knowledge.remove(s1)
                         self.knowledge.remove(s2)
-                        # return 0
+
                 elif s2.cells.issubset(s1.cells):
                     not_append = True
-                    # return 0
             if not not_append:
                 self.knowledge.append(s1)
         
@@ -324,24 +238,19 @@ class MinesweeperAI():
                     self.knowledge.remove(multi_literal)
                     new_multi_literal = multi_literal.cells
                     new_multi_literal.remove(n_single_literal)
-                    # Check against the list of single-literal clauses first.
                     self.inserting(Sentence(new_multi_literal))
-                    # try:
-                    #     self.inserting(Sentence(new_multi_literal))
-                    # except:
-                    #     print("check error", multi_literal.cells)
-                    #     print(new_multi_literal)
         
-    def init_knowledge(self):
-        pos = self.make_random_move()
+    def init_knowledge(self, pos=None):
+        if pos is None:
+            pos = self.make_random_move()
+        else:
+            print("user move:", pos)
         if pos in self.pos_set:
-            print("init error!")
             return 0
         self.pos_set.add(pos)
         cell_set = set()
         cell_set.add((pos[0], pos[1], -1))
         self.knowledge.append(Sentence(cell_set))
-        self.moves_made.add((pos[0], pos[1], -1))
         self.board[pos[0]][pos[1]] = -1
         return pos
     
@@ -379,14 +288,16 @@ class MinesweeperAI():
                 cell_set = set()
                 cell_set.add((c[0], c[1], 1))
                 self.inserting(Sentence(cell_set))
+                self.mines.add((c[0], c[1], 1))
             if not self.mark_board(self.game.board, "in m==n"):
                 return 0
         # all safe
         elif n == 0:
             for c in cells:
                 cell_set = set()
-                cell_set.add(c)
+                cell_set.add((c[0], c[1], -1))
                 self.inserting(Sentence(cell_set))
+                self.safes.add((c[0], c[1], -1))
                 
             if not self.mark_board(self.game.board, say="in n==0"):
                 print("KB", len(self.knowledge), len(self.knowledge0))
@@ -435,8 +346,6 @@ class MinesweeperAI():
         loop = True
         while(loop):
             copy_knowledge = copy.deepcopy(self.knowledge)
-            # for k in copy_knowledge:
-            #     print(k.cells)
             for k in copy_knowledge:
                 # If there is a single-lateral clause in the KB:
                 if len(k) < 1:
@@ -445,25 +354,22 @@ class MinesweeperAI():
                     # Mark that cell as safe or mined.
                     # Move that clause to KB0.
                     self.mark_single_literal(k)
-                    # self.matching(k)
                     self.unit_propagation(k)
-                    if not self.mark_board(self.game.board, "after unit_pro"):
-                        print("STEP2 ERROR", k.cells)
-                        return 0
+                    # if not self.mark_board(self.game.board, "after unit_pro"):
+                    #     print("STEP2 ERROR", k.cells)
+                    #     return 0
 
                     for c in k.cells:
                         if c[2] == -1:
                             self.init_neighbors(c[:2])
-                            
-                    if not self.mark_board(self.game.board, "after neighbor"):
-                        return 0
+                    # if not self.mark_board(self.game.board, "after neighbor"):
+                    #     return 0
                 else:
                     self.matching(k)
-                    # return 0
-                    if not self.mark_board(self.game.board, "after matching"):
-                        print("matching ERROR", k.cells)
-                        print("KB", len(self.knowledge), len(self.knowledge0))
-                        return 0
+                    # if not self.mark_board(self.game.board, "after matching"):
+                    #     print("matching ERROR", k.cells)
+                    #     print("KB", len(self.knowledge), len(self.knowledge0))
+                    #     return 0
             loop = self.check_state(copy_knowledge)
         return 0
     
